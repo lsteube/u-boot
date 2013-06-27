@@ -39,6 +39,7 @@ static table_entry_t imximage_cmds[] = {
 	{CMD_BOOT_FROM,         "BOOT_FROM",            "boot command",	  },
 	{CMD_BOOT_OFFSET,       "BOOT_OFFSET",          "Boot offset",	  },
 	{CMD_DATA,              "DATA",                 "Reg Write Data", },
+	{CMD_CSF,               "CSF",                  "Command Sequence File", },
 	{CMD_IMAGE_VERSION,     "IMAGE_VERSION",        "image version",  },
 	{-1,                    "",                     "",	          },
 };
@@ -86,12 +87,14 @@ static uint32_t imximage_version;
 static uint32_t imximage_ivt_offset;
 /* Initial Load Region Size */
 static uint32_t imximage_init_loadsize;
+static uint32_t imximage_csf_size;
 
 static set_dcd_val_t set_dcd_val;
 static set_dcd_rst_t set_dcd_rst;
 static set_imx_hdr_t set_imx_hdr;
 static uint32_t max_dcd_entries;
 static uint32_t *header_size_ptr;
+static uint32_t *csf_ptr;
 
 static uint32_t get_cfg_value(char *token, char *name,  int linenr)
 {
@@ -263,9 +266,10 @@ static void set_imx_hdr_v2(struct imx_header *imxhdr, uint32_t dcd_len,
 			+ offsetof(imx_header_v2_t, boot_data);
 	hdr_v2->boot_data.start = entry_point - imximage_init_loadsize;
 
-	/* Security feature are not supported */
 	fhdr_v2->csf = 0;
+
 	header_size_ptr = &hdr_v2->boot_data.size;
+	csf_ptr = &fhdr_v2->csf;
 }
 
 static void set_hdr_func(struct imx_header *imxhdr)
@@ -322,6 +326,7 @@ static void print_hdr_v2(struct imx_header *imx_hdr)
 	imx_header_v2_t *hdr_v2 = &imx_hdr->header.hdr_v2;
 	flash_header_v2_t *fhdr_v2 = &hdr_v2->fhdr;
 	dcd_v2_t *dcd_v2 = &hdr_v2->dcd_table;
+	boot_data_t *boot_data = (boot_data_t*)&fhdr_v2->boot_data_ptr;
 	uint32_t size, version;
 
 	size = be16_to_cpu(dcd_v2->header.length) - 8;
@@ -342,6 +347,11 @@ static void print_hdr_v2(struct imx_header *imx_hdr)
 	genimg_print_size(hdr_v2->boot_data.size);
 	printf("Load Address: %08x\n", (uint32_t)fhdr_v2->boot_data_ptr);
 	printf("Entry Point:  %08x\n", (uint32_t)fhdr_v2->entry);
+	if (fhdr_v2->csf) {
+		printf("HAB Blocks:   %08x %08x %08x\n", (uint32_t)fhdr_v2->self, 0,
+			hdr_v2->boot_data.size - imximage_ivt_offset
+			- imximage_csf_size);
+	}
 }
 
 static void parse_cfg_cmd(struct imx_header *imxhdr, int32_t cmd, char *token,
@@ -389,6 +399,17 @@ static void parse_cfg_cmd(struct imx_header *imxhdr, int32_t cmd, char *token,
 	case CMD_DATA:
 		value = get_cfg_value(token, name, lineno);
 		(*set_dcd_val)(imxhdr, name, lineno, fld, value, dcd_len);
+		if (unlikely(cmd_ver_first != 1))
+			cmd_ver_first = 0;
+		break;
+	case CMD_CSF:
+		if (imximage_version != 2) {
+			fprintf(stderr, "Error: %s[%d] - "
+				"CSF only supported for IMAGE_VERSION 2"
+				"(%s)\n", name, lineno, token);
+			exit(EXIT_FAILURE);
+		}
+		imximage_csf_size = get_cfg_value(token, name, lineno);
 		if (unlikely(cmd_ver_first != 1))
 			cmd_ver_first = 0;
 		break;
@@ -542,6 +563,7 @@ static void imximage_set_header(void *ptr, struct stat *sbuf, int ifd,
 	imximage_version = IMXIMAGE_V1;
 	/* Be able to detect if the cfg file has no BOOT_FROM tag */
 	imximage_ivt_offset = FLASH_OFFSET_UNDEFINED;
+	imximage_csf_size = 0;
 	set_hdr_func(imxhdr);
 
 	/* Parse dcd configuration file */
@@ -560,6 +582,11 @@ static void imximage_set_header(void *ptr, struct stat *sbuf, int ifd,
 	 * The remaining fraction of a block bytes would not be loaded!
 	 */
 	*header_size_ptr = ROUND(sbuf->st_size, 4096);
+
+	if (csf_ptr && imximage_csf_size) {
+		*csf_ptr = (uint8_t*)params->ep - imximage_init_loadsize + *header_size_ptr;
+		*header_size_ptr += imximage_csf_size;
+	}
 }
 
 int imximage_check_params(struct mkimage_params *params)

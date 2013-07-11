@@ -588,18 +588,96 @@ int imximage_check_params(struct mkimage_params *params)
 		(params->xflag) || !(strlen(params->imagename));
 }
 
+static int imximage_generate(struct mkimage_params *params,
+	struct image_type_params *tparams)
+{
+	struct imx_header *imxhdr;
+	size_t alloc_len;
+	int dfd;
+	struct stat sbuf;
+	char *datafile = params->datafile;
+	uint32_t pad_len;
+
+	memset(&imximage_header, 0, sizeof(imximage_header));
+
+	/*
+	 * In order to not change the old imx cfg file
+	 * by adding VERSION command into it, here need
+	 * set up function ptr group to V1 by default.
+	 */
+	imximage_version = IMXIMAGE_V1;
+	/* Be able to detect if the cfg file has no BOOT_FROM tag */
+	imximage_ivt_offset = FLASH_OFFSET_UNDEFINED;
+	imximage_csf_size = 0;
+	set_hdr_func(imxhdr);
+
+	/* Parse dcd configuration file */
+	parse_cfg_file(&imximage_header, params->imagename);
+
+	/* TODO: check i.MX image V1 handling, for now use 'old' style */
+	if (imximage_version == IMXIMAGE_V1)
+		alloc_len = 4096;
+	else
+		alloc_len = imximage_init_loadsize - imximage_ivt_offset;
+
+	if (alloc_len < sizeof(struct imx_header)) {
+		fprintf(stderr, "%s: header error\n",
+			params->cmdname);
+		exit(EXIT_FAILURE);
+	}
+
+	imxhdr = malloc(alloc_len);
+
+	if (!imxhdr) {
+		fprintf(stderr, "%s: malloc return failure: %s\n",
+			params->cmdname, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	memset(imxhdr, 0, alloc_len);
+
+	tparams->header_size = alloc_len;
+	tparams->hdr         = imxhdr;
+
+	/* determine data image file length */
+	dfd = open(datafile, O_RDONLY|O_BINARY);
+	if (dfd < 0) {
+		fprintf(stderr, "%s: Can't open %s: %s\n",
+			params->cmdname, datafile, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	if (fstat(dfd, &sbuf) < 0) {
+		fprintf(stderr, "%s: Can't stat %s: %s\n",
+			params->cmdname, datafile, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	pad_len = ROUND(sbuf.st_size, 4096) - sbuf.st_size;
+
+	close(dfd);
+
+	/* TODO: check i.MX image V1 handling, for now use 'old' style */
+	if (imximage_version == IMXIMAGE_V1)
+		return 0;
+	else
+		return pad_len;
+}
+
+
 /*
  * imximage parameters
  */
 static struct image_type_params imximage_params = {
 	.name		= "Freescale i.MX Boot Image support",
-	.header_size	= sizeof(struct imx_header),
-	.hdr		= (void *)&imximage_header,
+	.header_size	= 0,
+	.hdr		= NULL,
 	.check_image_type = imximage_check_image_types,
 	.verify_header	= imximage_verify_header,
 	.print_header	= imximage_print_header,
 	.set_header	= imximage_set_header,
 	.check_params	= imximage_check_params,
+	.vrec_header	= imximage_generate,
 };
 
 void init_imx_image_type(void)

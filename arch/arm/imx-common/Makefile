@@ -57,6 +57,10 @@ $(OBJTREE)/u-boot.imx: $(OBJTREE)/u-boot.bin $(OBJTREE)/$(patsubst "%",%,$(CONFI
 	$(OBJTREE)/tools/mkimage -n $(filter-out %.bin,$^) -T imximage \
 	-e $(CONFIG_SYS_TEXT_BASE) -d $< $@
 
+$(OBJTREE)/u-boot-dtb.imx: $(OBJTREE)/u-boot-dtb.bin $(OBJTREE)/$(patsubst "%",%,$(CONFIG_IMX_CONFIG)).cfgtmp
+	$(OBJTREE)/tools/mkimage -n $(filter-out %.bin,$^) -T imximage \
+	-e $(CONFIG_SYS_TEXT_BASE) -d $< $@
+
 $(OBJTREE)/SPL: $(OBJTREE)/spl/u-boot-spl.bin $(OBJTREE)/$(patsubst "%",%,$(CONFIG_IMX_CONFIG)).cfgtmp
 	$(OBJTREE)/tools/mkimage -n $(filter-out %.bin,$^) -T imximage \
 	-e $(CONFIG_SPL_TEXT_BASE) -d $< $@

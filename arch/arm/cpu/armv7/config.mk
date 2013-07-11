@@ -45,6 +45,10 @@ ifdef CONFIG_SPL_BUILD
 ALL-y	+= $(OBJTREE)/SPL
 endif
 else
+ifeq ($(CONFIG_OF_SEPARATE),y)
+ALL-y	+= $(obj)u-boot-dtb.imx
+else
 ALL-y	+= $(obj)u-boot.imx
+endif
 endif
 endif

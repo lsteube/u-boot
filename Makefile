@@ -473,8 +473,13 @@ $(obj)u-boot.img:	$(obj)u-boot.bin
 			sed -e 's/"[	 ]*$$/ for $(BOARD) board"/') \
 		-d $< $@
 
+ifeq ($(CONFIG_OF_SEPARATE),y)
+$(obj)u-boot-dtb.imx: $(obj)u-boot-dtb.bin depend
+		$(MAKE) -C $(SRCTREE)/arch/arm/imx-common $(OBJTREE)/u-boot-dtb.imx
+else
 $(obj)u-boot.imx: $(obj)u-boot.bin depend
 		$(MAKE) -C $(SRCTREE)/arch/arm/imx-common $(OBJTREE)/u-boot.imx
+endif
 
 $(obj)u-boot.kwb:       $(obj)u-boot.bin
 		$(obj)tools/mkimage -n $(CONFIG_SYS_KWD_CONFIG) -T kwbimage \
@@ -867,6 +872,7 @@ clobber:	tidy
 	@rm -f $(obj)u-boot.kwb
 	@rm -f $(obj)u-boot.pbl
 	@rm -f $(obj)u-boot.imx
+	@rm -f $(obj)u-boot-dtb.imx
 	@rm -f $(obj)u-boot-with-spl.imx
 	@rm -f $(obj)u-boot-with-nand-spl.imx
 	@rm -f $(obj)u-boot.ubl

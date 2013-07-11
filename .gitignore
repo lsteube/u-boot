@@ -29,6 +29,7 @@
 /System.map
 /u-boot
 /u-boot.hex
+/u-boot-dtb.imx
 /u-boot.imx
 /u-boot-with-spl.imx
 /u-boot-with-nand-spl.imx
